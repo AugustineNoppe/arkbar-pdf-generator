@@ -7,9 +7,9 @@ app.use(express.text({ type: 'text/html', limit: '10mb' }));
 app.post('/generate-pdf', async (req, res) => {
   try {
     const html = req.body;
-    
+    console.log('PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
     const browser = await puppeteer.launch({
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
