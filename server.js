@@ -2,14 +2,24 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const app = express();
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.text({ type: 'text/html', limit: '10mb' }));
 
 app.post('/generate-pdf', async (req, res) => {
   try {
-    const { html } = req.body;
+    const html = req.body;
     
     const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      ],
+      headless: 'new'
     });
     
     const page = await browser.newPage();
@@ -27,6 +37,7 @@ app.post('/generate-pdf', async (req, res) => {
     res.send(pdf);
     
   } catch (error) {
+    console.error('PDF generation error:', error);
     res.status(500).json({ error: error.message });
   }
 });
