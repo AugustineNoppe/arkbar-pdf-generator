@@ -6,29 +6,30 @@ const app = express();
 
 app.use(express.text({ type: 'text/html', limit: '10mb' }));
 
-function resolveChromePath() {
-  // 1) Prefer Railway env var if it’s valid
+function resolveChromiumPath() {
   const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+  // Log what we have (this is the "temporary log" you wanted)
+  console.log('PUPPETEER_EXECUTABLE_PATH:', envPath);
+  console.log('exists?', envPath ? fs.existsSync(envPath) : false);
+
+  // Prefer env path if it exists
   if (envPath && fs.existsSync(envPath)) return envPath;
 
-  // 2) Try common Linux chromium locations
-  const candidates = [
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable'
-  ];
-
+  // Common Linux paths
+  const candidates = ['/usr/bin/chromium', '/usr/bin/chromium-browser'];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
 
-  // 3) Fall back to Puppeteer’s bundled chromium (only works if Puppeteer downloaded it)
+  // Last resort: let puppeteer decide (may be empty if skip download is true)
   try {
-    const bundled = puppeteer.executablePath();
-    if (bundled && fs.existsSync(bundled)) return bundled;
+    const p = puppeteer.executablePath();
+    console.log('puppeteer.executablePath():', p);
+    console.log('exists?', p ? fs.existsSync(p) : false);
+    if (p && fs.existsSync(p)) return p;
   } catch (e) {
-    // ignore
+    console.log('puppeteer.executablePath() failed:', e.message);
   }
 
   return null;
@@ -39,22 +40,13 @@ app.post('/generate-pdf', async (req, res) => {
   try {
     const html = req.body;
 
-    const chromePath = resolveChromePath();
-
-    // DEBUG (your requested one-time step)
-    console.log('PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
-    console.log('exists?', process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH));
-    console.log('Resolved chromePath:', chromePath);
-    console.log('Resolved exists?', chromePath && fs.existsSync(chromePath));
-
-    if (!chromePath) {
-      return res.status(500).json({
-        error: 'No Chromium/Chrome executable found. Install chromium in Dockerfile or fix PUPPETEER_EXECUTABLE_PATH.'
-      });
+    const executablePath = resolveChromiumPath();
+    if (!executablePath) {
+      throw new Error('Chromium executable not found in container.');
     }
 
     browser = await puppeteer.launch({
-      executablePath: chromePath,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -78,13 +70,13 @@ app.post('/generate-pdf', async (req, res) => {
 
     await browser.close();
 
-    res.setHeader('Content-Type', 'application/pdf');
+    res.contentType('application/pdf');
     res.send(pdf);
   } catch (error) {
-    console.error('PDF generation error:', error);
     if (browser) {
-      try { await browser.close(); } catch (e) {}
+      try { await browser.close(); } catch (_) {}
     }
+    console.error('PDF generation error:', error);
     res.status(500).json({ error: error.message });
   }
 });
